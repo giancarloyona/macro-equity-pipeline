@@ -8,6 +8,24 @@ from macro_pipeline.fetchers.base import BaseFetcher
 class FredFetcher(BaseFetcher):
     """
     Fetcher implementation for Federal Reserve Economic Data (FRED).
+
+    This class provides methods to retrieve time series macroeconomic data from the FRED API
+    and format it as a pandas DataFrame for analysis and processing within the macro pipeline.
+
+    Usage:
+        - Requires a valid FRED API key for initialization.
+        - Use the `fetch_data` method to retrieve a macroeconomic series by FRED ticker code,
+          optionally specifying a date range.
+
+    Attributes:
+        client (Fred): An authenticated fredapi.Fred instance for making API calls.
+
+    Raises:
+        ValueError: If an API key is not provided upon initialization.
+
+    Example:
+        fetcher = FredFetcher(api_key="your_fred_api_key")
+        df = fetcher.fetch_data("CPIAUCSL", start_date=datetime(2010, 1, 1))
     """
 
     def __init__(self, api_key: Optional[str]):

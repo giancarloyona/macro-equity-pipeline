@@ -1,6 +1,5 @@
 import streamlit as st
 from datetime import datetime, timedelta
-import plotly.express as px
 from macro_pipeline.main import run_pipeline
 
 st.set_page_config(page_title="Macro Equity Insights", layout="wide")
@@ -13,7 +12,12 @@ using data from **FRED** and **Yahoo Finance**.
 
 st.sidebar.header("Pipeline Configuration")
 
-equity_ticker = st.sidebar.text_input("Equity Ticker (Yahoo)", value="SPY")
+equity_tickers = st.sidebar.text_input(
+    "Tickers (comma-separated)",
+    value="SPY,QQQ",
+    help="Example: SPY,QQQ",
+)
+
 macro_series = st.sidebar.text_input("Macro Series (FRED)", value="CPIAUCSL")
 
 default_start = datetime.now() - timedelta(days=365 * 10)
@@ -21,31 +25,75 @@ start_date = st.sidebar.date_input("Start Date", value=default_start)
 
 if st.sidebar.button("Run Analysis"):
     try:
-        with st.spinner(f"Fetching and processing data for {equity_ticker}..."):
+        equity_tickers = [ticker.strip() for ticker in equity_tickers.split(",")]
 
+        with st.spinner(f"Fetching and processing data for {equity_tickers}..."):
             data = run_pipeline(
-                equity_ticker=equity_ticker,
+                equity_tickers=equity_tickers,
                 macro_series=macro_series,
                 start_date=datetime.combine(start_date, datetime.min.time()),
             )
 
-        col1, col2 = st.columns(2)
+        st.subheader("Cumulative Real Return")
 
-        with col1:
-            st.metric(
-                "Final Cumulative Real Return",
-                f"{data['cumulative_real_return'].iloc[-1]:.2%}",
+        cumulative_cols = [
+            col for col in data.columns if "cumulative_real_return" in col
+        ]
+        st.markdown(
+            """
+            <style>
+            .stPlotlyChart {overflow:visible !important;}
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        import plotly.graph_objects as go
+
+        fig = go.Figure()
+        color_palette = [
+            "#1f77b4",
+            "#ff7f0e",
+            "#2ca02c",
+            "#d62728",
+            "#9467bd",
+            "#8c564b",
+            "#e377c2",
+            "#7f7f7f",
+            "#bcbd22",
+            "#17becf",
+        ]
+
+        for i, col in enumerate(cumulative_cols):
+            fig.add_trace(
+                go.Scatter(
+                    x=data.index,
+                    y=data[col],
+                    mode="lines",
+                    name=col.replace("cumulative_real_return_", "").upper(),
+                    line=dict(color=color_palette[i % len(color_palette)], width=2),
+                    hovertemplate="<b>Date</b>: %{x|%Y-%m-%d}<br><b>Cumulative Return</b>: %{y:.2%}<extra></extra>",
+                )
             )
 
-        with col2:
-            st.metric("Total Data Points", len(data))
-
-        st.subheader(f"Cumulative Real Return: {equity_ticker} adj. by {macro_series}")
-        fig = px.line(
-            data, y="cumulative_real_return", title="Wealth Index (Real Terms)"
+        fig.update_layout(
+            title="Cumulative Real Returns Over Time",
+            xaxis_title="Date",
+            yaxis_title="Cumulative Real Return",
+            yaxis_tickformat=".1%",
+            legend_title="Asset",
+            template="plotly_white",
+            hovermode="x unified",
+            margin=dict(l=40, r=40, t=60, b=40),
+            height=460,
         )
-        fig.update_layout(yaxis_tickformat=".0%")
-        st.plotly_chart(fig, use_container_width=True)
+
+        st.plotly_chart(fig, width="stretch")
+
+        st.subheader("Performance metrics")
+        for col in cumulative_cols:
+            latest_return = data[col].iloc[-1]
+            st.metric(label=col, value=f"{latest_return:.2%}")
 
     except Exception as e:
         st.error(f"Error executing pipeline: {e}")
