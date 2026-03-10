@@ -61,17 +61,14 @@ class AnalyticsProcessor:
         return df
 
     def get_performance_metrics(
-        self, df: pd.DataFrame, equity_cols: Union[str, List[str]]
+        self, df: pd.DataFrame, equity_cols: List[str]
     ) -> Union[Dict, List[Dict]]:
         """
         Calculates risk and performance metrics for one or more assets
         based on the already calculated real return columns.
         """
-        if isinstance(equity_cols, str):
-            equity_cols = [equity_cols]
-            return_single = True
-        else:
-            return_single = False
+        if len(equity_cols) == 1:
+            equity_cols = ["value"]
 
         metrics_results = []
 
@@ -107,4 +104,21 @@ class AnalyticsProcessor:
                 }
             )
 
-        return metrics_results[0] if return_single else metrics_results
+        return metrics_results
+
+    def get_correlation_matrix(
+        self, df: pd.DataFrame, equity_cols: List[str]
+    ) -> pd.DataFrame:
+        """
+        Calculates the correlation matrix between the real returns of the selected assets.
+        """
+        cols_to_corr = [f"real_return_{ticker}" for ticker in equity_cols]
+
+        corr_matrix = df[cols_to_corr].corr()
+
+        corr_matrix.columns = [
+            c.replace("real_return_", "") for c in corr_matrix.columns
+        ]
+        corr_matrix.index = [c.replace("real_return_", "") for c in corr_matrix.index]
+
+        return corr_matrix

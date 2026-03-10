@@ -1,7 +1,10 @@
 import streamlit as st
 from datetime import datetime, timedelta
 from macro_pipeline.main import run_pipeline
+from macro_pipeline.processors.analytics import AnalyticsProcessor
 import pandas as pd
+import numpy as np
+import plotly.graph_objects as go
 
 st.set_page_config(page_title="Macro Equity Insights", layout="wide")
 
@@ -27,13 +30,16 @@ start_date = st.sidebar.date_input("Start Date", value=default_start)
 if st.sidebar.button("Run Analysis"):
     try:
         equity_tickers = [ticker.strip() for ticker in equity_tickers.split(",")]
+        processor = AnalyticsProcessor()
 
         with st.spinner(f"Fetching and processing data for {equity_tickers}..."):
-            data, metrics = run_pipeline(
+            data = run_pipeline(
                 equity_tickers=equity_tickers,
                 macro_series=macro_series,
                 start_date=datetime.combine(start_date, datetime.min.time()),
             )
+
+        metrics = processor.get_performance_metrics(data, equity_tickers)
 
         st.subheader("Cumulative Real Return")
 
@@ -48,8 +54,6 @@ if st.sidebar.button("Run Analysis"):
             """,
             unsafe_allow_html=True,
         )
-
-        import plotly.graph_objects as go
 
         fig = go.Figure()
         color_palette = [
@@ -91,13 +95,66 @@ if st.sidebar.button("Run Analysis"):
 
         st.plotly_chart(fig, width="stretch")
 
+        if len(equity_tickers) >= 2:
+            st.divider()
+            st.subheader("Asset Correlation Matrix (Real Returns)")
+
+            with st.expander("Why correlation matters?", expanded=False):
+                st.write("""
+                    Correlation ranges from **-1 to 1**:
+                    * **1.0**: Assets move in perfect sync (no diversification).
+                    * **0.0**: Assets move independently (good for risk reduction).
+                    * **-1.0**: Assets move in opposite directions (perfect hedge).
+                """)
+
+            corr = processor.get_correlation_matrix(data, equity_tickers)
+
+            fig_corr = go.Figure(
+                data=go.Heatmap(
+                    z=corr.values,
+                    x=corr.columns,
+                    y=corr.index,
+                    colorscale="RdBu_r",
+                    zmin=-1,
+                    zmax=1,
+                    colorbar=dict(title="Correlation"),
+                    text=np.round(corr.values, 2),
+                    hovertemplate="<b>%{y}</b> vs <b>%{x}</b>: %{z:.2f}<extra></extra>",
+                )
+            )
+            # Add correlation values as annotations on heatmap
+            for i in range(len(corr.index)):
+                for j in range(len(corr.columns)):
+                    fig_corr.add_annotation(
+                        x=corr.columns[j],
+                        y=corr.index[i],
+                        text=f"{corr.values[i, j]:.2f}",
+                        showarrow=False,
+                        font=dict(color="black", size=12),
+                    )
+            fig_corr.update_layout(
+                xaxis_title="Asset",
+                yaxis_title="Asset",
+                title="Correlation Matrix (Real Returns)",
+                yaxis_autorange="reversed",
+            )
+
+            st.plotly_chart(fig_corr, width="content")
+        else:
+            st.info("Add two or more tickers to see the correlation matrix.")
+
         st.subheader("Performance metrics")
         for col in cumulative_cols:
             latest_return = data[col].iloc[-1]
             st.metric(label=col, value=f"{latest_return:.2%}")
 
         st.subheader("Key Performance Indicators (Real Terms)")
-        df_metrics = pd.DataFrame(metrics).set_index("ticker")
+
+        if isinstance(metrics, dict):
+            df_metrics = pd.DataFrame([metrics], index=[0])
+        else:
+            df_metrics = pd.DataFrame(metrics, index=range(len(metrics)))
+
         st.dataframe(
             df_metrics.style.highlight_max(
                 axis=0, subset=["sharpe_ratio", "total_real_return"], color="lightgreen"

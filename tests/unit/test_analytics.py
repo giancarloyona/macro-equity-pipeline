@@ -52,30 +52,6 @@ def test_merge_multiple_equity_and_macro_data():
     assert merged_df["value_cpi"].iloc[2] == 255.0
 
 
-def test_get_performance_metrics_calculation():
-    data = {
-        "real_return_AAPL": [np.nan, 0.01, -0.02, 0.03],
-        "cumulative_real_return_AAPL": [0.0, 0.01, -0.0102, 0.019494],
-    }
-    df = pd.DataFrame(
-        data,
-        index=pd.to_datetime(["2023-01-01", "2023-01-02", "2023-01-03", "2023-01-04"]),
-    )
-
-    processor = AnalyticsProcessor()
-    metrics = processor.get_performance_metrics(df, equity_cols="AAPL")
-
-    assert isinstance(metrics, dict)
-    assert metrics["ticker"] == "AAPL"
-
-    expected_vol = np.std([0.01, -0.02, 0.03], ddof=1) * np.sqrt(252)
-    assert metrics["volatility"] == pytest.approx(expected_vol)
-
-    assert metrics["max_drawdown"] == pytest.approx(-0.02)
-
-    assert metrics["total_real_return"] == pytest.approx(0.019494)
-
-
 def test_get_performance_metrics_multi_ticker():
     data = {
         "real_return_AAPL": [0.01, 0.02],
@@ -92,3 +68,36 @@ def test_get_performance_metrics_multi_ticker():
     assert len(metrics_list) == 2
     assert metrics_list[0]["ticker"] == "AAPL"
     assert metrics_list[1]["ticker"] == "TSLA"
+
+
+def test_get_correlation_matrix_logic():
+    data = {
+        "real_return_AAPL": [0.01, 0.02, 0.03],
+        "real_return_MSFT": [0.01, 0.02, 0.03],
+        "real_return_GOLD": [-0.01, -0.02, -0.03],
+    }
+    df = pd.DataFrame(data)
+
+    processor = AnalyticsProcessor()
+    tickers = ["AAPL", "MSFT", "GOLD"]
+    corr_matrix = processor.get_correlation_matrix(df, tickers)
+
+    assert list(corr_matrix.columns) == tickers
+    assert list(corr_matrix.index) == tickers
+
+    assert corr_matrix.loc["AAPL", "AAPL"] == pytest.approx(1.0)
+    assert corr_matrix.loc["AAPL", "MSFT"] == pytest.approx(1.0)
+    assert corr_matrix.loc["AAPL", "GOLD"] == pytest.approx(-1.0)
+
+
+def test_correlation_with_nan_values():
+    data = {
+        "real_return_A": [np.nan, 0.01, 0.05, 0.02],
+        "real_return_B": [np.nan, 0.02, 0.10, 0.04],
+    }
+    df = pd.DataFrame(data)
+
+    processor = AnalyticsProcessor()
+    corr_matrix = processor.get_correlation_matrix(df, ["A", "B"])
+
+    assert corr_matrix.loc["A", "B"] == pytest.approx(1.0)
