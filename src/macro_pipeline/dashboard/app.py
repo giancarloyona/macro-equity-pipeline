@@ -1,6 +1,7 @@
 import streamlit as st
 from datetime import datetime, timedelta
 from macro_pipeline.main import run_pipeline
+import pandas as pd
 
 st.set_page_config(page_title="Macro Equity Insights", layout="wide")
 
@@ -28,7 +29,7 @@ if st.sidebar.button("Run Analysis"):
         equity_tickers = [ticker.strip() for ticker in equity_tickers.split(",")]
 
         with st.spinner(f"Fetching and processing data for {equity_tickers}..."):
-            data = run_pipeline(
+            data, metrics = run_pipeline(
                 equity_tickers=equity_tickers,
                 macro_series=macro_series,
                 start_date=datetime.combine(start_date, datetime.min.time()),
@@ -94,6 +95,14 @@ if st.sidebar.button("Run Analysis"):
         for col in cumulative_cols:
             latest_return = data[col].iloc[-1]
             st.metric(label=col, value=f"{latest_return:.2%}")
+
+        st.subheader("Key Performance Indicators (Real Terms)")
+        df_metrics = pd.DataFrame(metrics).set_index("ticker")
+        st.dataframe(
+            df_metrics.style.highlight_max(
+                axis=0, subset=["sharpe_ratio", "total_real_return"], color="lightgreen"
+            )
+        )
 
     except Exception as e:
         st.error(f"Error executing pipeline: {e}")

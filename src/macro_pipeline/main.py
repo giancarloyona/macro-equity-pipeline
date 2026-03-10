@@ -55,6 +55,8 @@ def run_pipeline(equity_tickers: list[str], macro_series: str, start_date: datet
         merged_df, equity_cols=equity_cols, macro_col=f"value_{macro_series.lower()}"
     )
 
+    metrics = processor.get_performance_metrics(final_df, equity_cols)
+
     print("\nPipeline Finished Successfully!")
     print(f"Total data points: {len(final_df)}")
     print("Latest Real Returns (Cumulative):")
@@ -65,7 +67,7 @@ def run_pipeline(equity_tickers: list[str], macro_series: str, start_date: datet
         ]
         final_df.columns = adj_cols
 
-    return final_df
+    return final_df, metrics
 
 
 if __name__ == "__main__":

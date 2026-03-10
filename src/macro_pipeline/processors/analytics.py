@@ -1,5 +1,6 @@
 import pandas as pd
-from typing import List, Union
+import numpy as np
+from typing import List, Union, Dict
 
 
 class AnalyticsProcessor:
@@ -58,3 +59,52 @@ class AnalyticsProcessor:
             ).cumprod() - 1
 
         return df
+
+    def get_performance_metrics(
+        self, df: pd.DataFrame, equity_cols: Union[str, List[str]]
+    ) -> Union[Dict, List[Dict]]:
+        """
+        Calculates risk and performance metrics for one or more assets
+        based on the already calculated real return columns.
+        """
+        if isinstance(equity_cols, str):
+            equity_cols = [equity_cols]
+            return_single = True
+        else:
+            return_single = False
+
+        metrics_results = []
+
+        for col in equity_cols:
+            real_ret_col = f"real_return_{col}"
+            cum_ret_col = f"cumulative_real_return_{col}"
+
+            if real_ret_col not in df.columns:
+                continue
+
+            returns = df[real_ret_col].dropna()
+            if returns.empty:
+                continue
+
+            vol_anual = returns.std() * np.sqrt(252)
+
+            ret_medio_anual = returns.mean() * 252
+
+            sharpe = ret_medio_anual / vol_anual if vol_anual != 0 else 0
+
+            wealth_index = 1 + df[cum_ret_col]
+            previous_peaks = wealth_index.cummax()
+            drawdowns = (wealth_index - previous_peaks) / previous_peaks
+            max_drawdown = drawdowns.min()
+
+            metrics_results.append(
+                {
+                    "ticker": col,
+                    "volatility": vol_anual,
+                    "sharpe_ratio": sharpe,
+                    "max_drawdown": max_drawdown,
+                    "total_real_return": df[cum_ret_col].iloc[-1],
+                }
+            )
+
+        return metrics_results[0] if return_single else metrics_results

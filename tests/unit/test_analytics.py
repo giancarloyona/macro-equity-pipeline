@@ -1,5 +1,7 @@
 import pandas as pd
 from macro_pipeline.processors.analytics import AnalyticsProcessor
+import pytest
+import numpy as np
 
 
 def test_merge_macro_and_equity_data():
@@ -48,3 +50,45 @@ def test_merge_multiple_equity_and_macro_data():
     assert "value_cpi" in merged_df.columns
     assert merged_df["value_cpi"].iloc[0] == 250.0
     assert merged_df["value_cpi"].iloc[2] == 255.0
+
+
+def test_get_performance_metrics_calculation():
+    data = {
+        "real_return_AAPL": [np.nan, 0.01, -0.02, 0.03],
+        "cumulative_real_return_AAPL": [0.0, 0.01, -0.0102, 0.019494],
+    }
+    df = pd.DataFrame(
+        data,
+        index=pd.to_datetime(["2023-01-01", "2023-01-02", "2023-01-03", "2023-01-04"]),
+    )
+
+    processor = AnalyticsProcessor()
+    metrics = processor.get_performance_metrics(df, equity_cols="AAPL")
+
+    assert isinstance(metrics, dict)
+    assert metrics["ticker"] == "AAPL"
+
+    expected_vol = np.std([0.01, -0.02, 0.03], ddof=1) * np.sqrt(252)
+    assert metrics["volatility"] == pytest.approx(expected_vol)
+
+    assert metrics["max_drawdown"] == pytest.approx(-0.02)
+
+    assert metrics["total_real_return"] == pytest.approx(0.019494)
+
+
+def test_get_performance_metrics_multi_ticker():
+    data = {
+        "real_return_AAPL": [0.01, 0.02],
+        "cumulative_real_return_AAPL": [0.01, 0.0302],
+        "real_return_TSLA": [0.05, -0.01],
+        "cumulative_real_return_TSLA": [0.05, 0.0395],
+    }
+    df = pd.DataFrame(data, index=pd.to_datetime(["2023-01-01", "2023-01-02"]))
+
+    processor = AnalyticsProcessor()
+    metrics_list = processor.get_performance_metrics(df, equity_cols=["AAPL", "TSLA"])
+
+    assert isinstance(metrics_list, list)
+    assert len(metrics_list) == 2
+    assert metrics_list[0]["ticker"] == "AAPL"
+    assert metrics_list[1]["ticker"] == "TSLA"
